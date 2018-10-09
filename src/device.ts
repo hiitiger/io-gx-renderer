@@ -3,6 +3,10 @@ import { Vertex } from "./vertex.js";
 import { Camera } from "./camera.js";
 import { Texture } from "./texture.js";
 
+function isCcw(v0: BABYLON.Vector3, v1: BABYLON.Vector3, v2: BABYLON.Vector3) {
+  return (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x) >= 0;
+}
+
 export enum RenderState {
   None = 0,
   WireFrame = 1,
@@ -188,7 +192,7 @@ export class Device {
       }
 
       let textureColor: BABYLON.Color4;
-      if (tex && (this.renderState & RenderState.Texture)) {
+      if (tex && this.renderState & RenderState.Texture) {
         const u = this.interpolate(v0.uv.x, v1.uv.x, factor);
         const v = this.interpolate(v0.uv.y, v1.uv.y, factor);
         textureColor = tex.map(u, v);
@@ -197,7 +201,7 @@ export class Device {
       }
 
       let vertColor: BABYLON.Color4;
-      if (v0.color && (this.renderState & RenderState.Color)) {
+      if (v0.color && this.renderState & RenderState.Color) {
         vertColor = this.interpolate(v0.color, v1.color, factor);
       } else {
         vertColor = new BABYLON.Color4(1, 1, 1, 1);
@@ -222,6 +226,10 @@ export class Device {
     color: BABYLON.Color4,
     tex?: Texture
   ) {
+    if (!isCcw(v0.pos, v1.pos, v2.pos)) {
+      return;
+    }
+
     if (v0.pos.y > v1.pos.y) {
       [v0, v1] = [v1, v0];
     }
