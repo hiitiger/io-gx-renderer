@@ -1,7 +1,7 @@
 import { Mesh } from "./mesh.js";
 import { Camera } from "./camera.js";
 
-import { Device } from "./device.js";
+import { Device, RenderState } from "./device.js";
 import { loadMesh, loadTexture } from "./loader.js";
 
 let canvas: HTMLCanvasElement;
@@ -83,20 +83,22 @@ const init = async () => {
         { verts: [3, 2, 6] },
         { verts: [3, 6, 7] }
     ]);
-    // meshes.push(cubeMesh);
+    meshes.push(cubeMesh);
 
     {
         const model = await loadMesh("cat");
         model.tex = await loadTexture("cat_d");
+        model.position = new BABYLON.Vector3(0, 1, -4)
         meshes.push(model);
     }
 
     camera = new Camera();
-    camera.position = new BABYLON.Vector3(0, 0, -8);
+    camera.position = new BABYLON.Vector3(0, 0, -12);
     camera.target = new BABYLON.Vector3(0, 0, 0);
 
     device = new Device(canvas);
-    device.light = new BABYLON.Vector3(0, 0, -1.1);
+    device.light = new BABYLON.Vector3(0, 1, -5.5);
+    device.renderState = RenderState.Texture | RenderState.Color
     requestAnimationFrame(renderLoop);
 
     button.innerText = "stop";

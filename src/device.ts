@@ -3,6 +3,13 @@ import { Vertex } from "./vertex.js";
 import { Camera } from "./camera.js";
 import { Texture } from "./texture.js";
 
+export enum RenderState {
+  None = 0,
+  WireFrame = 1,
+  Texture = 1 << 1,
+  Color = 1 << 2
+}
+
 export class Device {
   private backbuffer: ImageData;
   private canvas: HTMLCanvasElement;
@@ -14,6 +21,7 @@ export class Device {
 
   public light: BABYLON.Vector3;
   public lighting: boolean;
+  public renderState: RenderState;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -23,6 +31,7 @@ export class Device {
     this.zbuffer = new Array(this.width * this.height);
     this.light = new BABYLON.Vector3(0, 0, 1.2);
     this.lighting = false;
+    this.renderState = RenderState.WireFrame;
   }
 
   clear() {
@@ -172,14 +181,14 @@ export class Device {
       }
       const z = this.interpolate(z0, z1, factor);
 
-      if (v1.normal) {
+      if (this.lighting) {
         const normal = this.interpolate(v0.normal, v1.normal, factor);
         const worldPos = this.interpolate(v0.worldPos, v1.worldPos, factor);
         diffuse = this.computeDiffuse(worldPos, normal, this.light);
       }
 
       let textureColor: BABYLON.Color4;
-      if (tex) {
+      if (tex && (this.renderState & RenderState.Texture)) {
         const u = this.interpolate(v0.uv.x, v1.uv.x, factor);
         const v = this.interpolate(v0.uv.y, v1.uv.y, factor);
         textureColor = tex.map(u, v);
@@ -188,7 +197,7 @@ export class Device {
       }
 
       let vertColor: BABYLON.Color4;
-      if (v0.color) {
+      if (v0.color && (this.renderState & RenderState.Color)) {
         vertColor = this.interpolate(v0.color, v1.color, factor);
       } else {
         vertColor = new BABYLON.Color4(1, 1, 1, 1);
@@ -240,86 +249,106 @@ export class Device {
     //     diffuse = this.computeDiffuse(center, vn, this.light);
     // }
 
-    const middelFactor = (point1.y - point0.y) / (point2.y - point0.y);
-    const middleVert: Vertex = {
-      pos: this.interpolate(point0, point2, middelFactor),
-      worldPos: this.interpolate(v0.worldPos, v2.worldPos, middelFactor)
-    };
-    if (this.lighting) {
-      middleVert.normal = this.interpolate(v0.normal, v2.normal, middelFactor);
-    }
-    if (v0.color) {
-      middleVert.color = this.interpolate(v0.color, v2.color, middelFactor);
-    }
-    if (tex) {
-      middleVert.uv = this.interpolate(v0.uv, v2.uv, middelFactor);
-    }
-
-    for (let y = point0.y; y < point2.y; ++y) {
-      const isUpperHalf = y < point1.y;
-      if (isUpperHalf) {
-        const factor = (y - point0.y) / (point1.y - point0.y);
-
-        const vx01: Vertex = {
-          pos: this.interpolate(point0, point1, factor)
-        };
-        const vx02: Vertex = {
-          pos: this.interpolate(point0, middleVert.pos, factor)
-        };
-        if (tex) {
-          vx01.uv = this.interpolate(v0.uv, v1.uv, factor);
-          vx02.uv = this.interpolate(v0.uv, middleVert.uv, factor);
-        }
-
-        if (this.lighting) {
-          vx01.worldPos = this.interpolate(v0.worldPos, v1.worldPos, factor);
-          vx01.normal = this.interpolate(v0.normal, v1.normal, factor);
-
-          vx02.worldPos = this.interpolate(
-            v0.worldPos,
-            middleVert.worldPos,
-            factor
-          );
-          vx02.normal = this.interpolate(v0.normal, middleVert.normal, factor);
-        }
-
-        if (middleVert.color) {
-          vx01.color = this.interpolate(v0.color, v1.color, factor);
-          vx02.color = this.interpolate(v0.color, middleVert.color, factor);
-        }
-
-        this.drawScanline(vx01, vx02, y, diffuse, color, tex);
-      } else {
-        const factor = (y - point1.y) / (point2.y - point1.y);
-
-        const vx12: Vertex = {
-          pos: this.interpolate(point1, point2, factor)
-        };
-        const vx02: Vertex = {
-          pos: this.interpolate(middleVert.pos, point2, factor)
-        };
-        if (tex) {
-          vx12.uv = this.interpolate(v1.uv, v2.uv, factor);
-          vx02.uv = this.interpolate(middleVert.uv, v2.uv, factor);
-        }
-
-        if (this.lighting) {
-          vx12.worldPos = this.interpolate(v1.worldPos, v2.worldPos, factor);
-          vx12.normal = this.interpolate(v1.normal, v2.normal, factor);
-
-          vx02.worldPos = this.interpolate(
-            middleVert.worldPos,
-            v2.worldPos,
-            factor
-          );
-          vx02.normal = this.interpolate(middleVert.normal, v2.normal, factor);
-        }
-        if (middleVert.color) {
-          vx12.color = this.interpolate(v1.color, v2.color, factor);
-          vx02.color = this.interpolate(middleVert.color, v2.color, factor);
-        }
-        this.drawScanline(vx12, vx02, y, diffuse, color, tex);
+    if (this.renderState & (RenderState.Texture | RenderState.Color)) {
+      const middelFactor = (point1.y - point0.y) / (point2.y - point0.y);
+      const middleVert: Vertex = {
+        pos: this.interpolate(point0, point2, middelFactor),
+        worldPos: this.interpolate(v0.worldPos, v2.worldPos, middelFactor)
+      };
+      if (this.lighting) {
+        middleVert.normal = this.interpolate(
+          v0.normal,
+          v2.normal,
+          middelFactor
+        );
       }
+      if (v0.color) {
+        middleVert.color = this.interpolate(v0.color, v2.color, middelFactor);
+      }
+      if (tex) {
+        middleVert.uv = this.interpolate(v0.uv, v2.uv, middelFactor);
+      }
+
+      for (let y = point0.y; y < point2.y; ++y) {
+        const isUpperHalf = y < point1.y;
+        if (isUpperHalf) {
+          const factor = (y - point0.y) / (point1.y - point0.y);
+
+          const vx01: Vertex = {
+            pos: this.interpolate(point0, point1, factor)
+          };
+          const vx02: Vertex = {
+            pos: this.interpolate(point0, middleVert.pos, factor)
+          };
+          if (tex) {
+            vx01.uv = this.interpolate(v0.uv, v1.uv, factor);
+            vx02.uv = this.interpolate(v0.uv, middleVert.uv, factor);
+          }
+
+          if (this.lighting) {
+            vx01.worldPos = this.interpolate(v0.worldPos, v1.worldPos, factor);
+            vx01.normal = this.interpolate(v0.normal, v1.normal, factor);
+
+            vx02.worldPos = this.interpolate(
+              v0.worldPos,
+              middleVert.worldPos,
+              factor
+            );
+            vx02.normal = this.interpolate(
+              v0.normal,
+              middleVert.normal,
+              factor
+            );
+          }
+
+          if (middleVert.color) {
+            vx01.color = this.interpolate(v0.color, v1.color, factor);
+            vx02.color = this.interpolate(v0.color, middleVert.color, factor);
+          }
+
+          this.drawScanline(vx01, vx02, y, diffuse, color, tex);
+        } else {
+          const factor = (y - point1.y) / (point2.y - point1.y);
+
+          const vx12: Vertex = {
+            pos: this.interpolate(point1, point2, factor)
+          };
+          const vx02: Vertex = {
+            pos: this.interpolate(middleVert.pos, point2, factor)
+          };
+          if (tex) {
+            vx12.uv = this.interpolate(v1.uv, v2.uv, factor);
+            vx02.uv = this.interpolate(middleVert.uv, v2.uv, factor);
+          }
+
+          if (this.lighting) {
+            vx12.worldPos = this.interpolate(v1.worldPos, v2.worldPos, factor);
+            vx12.normal = this.interpolate(v1.normal, v2.normal, factor);
+
+            vx02.worldPos = this.interpolate(
+              middleVert.worldPos,
+              v2.worldPos,
+              factor
+            );
+            vx02.normal = this.interpolate(
+              middleVert.normal,
+              v2.normal,
+              factor
+            );
+          }
+          if (middleVert.color) {
+            vx12.color = this.interpolate(v1.color, v2.color, factor);
+            vx02.color = this.interpolate(middleVert.color, v2.color, factor);
+          }
+          this.drawScanline(vx12, vx02, y, diffuse, color, tex);
+        }
+      }
+    }
+
+    if (this.renderState & RenderState.WireFrame) {
+      this.drawLine(v0.pos, v1.pos);
+      this.drawLine(v1.pos, v2.pos);
+      this.drawLine(v2.pos, v0.pos);
     }
   }
 
